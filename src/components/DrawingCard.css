@@ -1,0 +1,55 @@
+.drawing-card {
+  background-color: #f0f9fa;
+  border-radius: 12px;
+  /* padding: 12px; */
+  /* width: 240px; */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.drawing-card:hover {
+  transform: translateY(-3px);
+}
+
+.drawing-img {
+  width: 100%;
+  /* border-radius: 8px; */
+}
+
+.drawing-info {
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #333;
+  background-color: #f4f2f2;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: end;
+}
+
+.edit-btn,
+.download-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.edit-btn {
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+}
+
+/* .download-btn {
+  background-color: #e0f7fa;
+  border: 1px solid #00acc1;
+} */

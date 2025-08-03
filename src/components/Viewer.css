@@ -1,0 +1,18 @@
+.viewer {
+  display: flex;
+  height: 100vh;
+}
+
+.drawing-view {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.drawing-img {
+  width: auto;
+  height: 150px;
+
+  /* border: 1px solid #ccc; */
+  /* border-radius: 8px; */
+}
