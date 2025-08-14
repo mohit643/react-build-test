@@ -4,7 +4,6 @@ import DrawingCard from "./DrawingCard";
 import PdfViewer from "./PdfViewer";
 import { useLocation } from "react-router-dom";
 
-
 export default function Dashboard() {
   const location = useLocation();
   const fileInputRef = useRef(null);
