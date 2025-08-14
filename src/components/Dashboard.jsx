@@ -3,7 +3,7 @@ import "./Dashboard.css";
 import DrawingCard from "./DrawingCard";
 import PdfViewer from "./PdfViewer";
 import { useLocation } from "react-router-dom";
-import CustomFileInput from "./CustomFileInput";
+
 
 export default function Dashboard() {
   const location = useLocation();
