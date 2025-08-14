@@ -1,25 +1,25 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./Dashboard.css";
 import DrawingCard from "./DrawingCard";
-import drawing1 from "../assets/dummy-pdfs/drawing-1.pdf";
 import PdfViewer from "./PdfViewer";
 import { useLocation } from "react-router-dom";
+import CustomFileInput from "./CustomFileInput";
 
-export default function Dashboard({ onItemClick }) {
+export default function Dashboard() {
   const location = useLocation();
-  const allItems = new Array(42).fill(0).map((_, i) => ({
-    id: i + 1,
-    title: `825-020-01650-02-A-${i + 1}`,
-    pdf: drawing1, // Simulated PDF path
-  }));
-
-  const itemsPerPage = 12;
+  const fileInputRef = useRef(null);
   const [user, setUser] = useState(null);
+
+  const [pdfs, setPdfs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [search, setSearch] = useState({ itemNumber: "", status: "" });
-  const [pdfList, setPdfList] = useState([]);
+
+  const [edit, setEdit] = useState(false);
+  const [view, setView] = useState(false);
+
+  const itemsPerPage = 12;
+
   const [form, setForm] = useState({
     itemNumber: "",
     description: "",
@@ -30,147 +30,232 @@ export default function Dashboard({ onItemClick }) {
     bolt_circle_diameter: "",
     bolt_hole_style: "",
   });
-  const fileInputRef = useRef(null);
-  const totalPages = Math.ceil(pdfList.length / itemsPerPage);
-  const currentItems = pdfList
-    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-    .map((item, i) => ({
-      id: item.pdf_record_id || i + 1,
-      title: item.pdf_name || `Untitled-${i + 1}`,
-      pdf: `data:application/pdf;base64,${item.pdf_base64}`,
-      createddate: item.createddate,
-      description: item.description,
-      status: item.status,
-    }));
 
-  // useEffect(() => {
-  //   // fetchPdfList();
-  // }, []);
+  const totalPages = Math.ceil(pdfs.length / itemsPerPage);
+  const currentItems = pdfs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   useEffect(() => {
-    const queryParams = new URLSearchParams(location.search);
-    const userParam = queryParams.get("user");
+    fetchAndShowPdfs();
 
+    const userParam = new URLSearchParams(location.search).get("user");
     if (userParam) {
       try {
-        const parsedUser = JSON.parse(decodeURIComponent(userParam));
-        setUser(parsedUser);
-        console.log("Full user details:", parsedUser);
+        setUser(JSON.parse(decodeURIComponent(userParam)));
       } catch (error) {
-        console.error("Failed to parse user info:", error);
-        setUser(null);
+        console.error("User parsing failed:", error);
       }
     }
-  }, [location.search]);
+  }, []);
 
-  const fetchPdfList = async (filters = {}) => {
+  const fetchAndShowPdfs = async (filters = {}) => {
     setIsLoading(true);
     try {
-      const res = await fetch("http://192.168.6.18:8000/allpdfsBy-UserId", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          user_id: 33,
-          pdf_file_name: filters.itemNumber || "",
-          status: filters.status || "",
-          description: filters.description || "",
-          bolt_hole_size: filters.bolt_hole_size || "",
-          bolt_pattern: filters.bolt_pattern || "",
-          bolt_circle_diameter: filters.bolt_circle_diameter || "",
-          bolt_hole_style: filters.bolt_hole_style || "",
-        }),
-      });
-
-      const result = await res.json();
-      if (res.ok) {
-        setPdfList(result?.data || []);
-      } else {
-        alert("Failed to fetch PDF list.");
-      }
-    } catch (_) {
-      alert("Network error while loading PDF list.");
+      const params = new URLSearchParams(filters).toString();
+      const url = `https://remixbackend-badjarfeekbufqb3.canadacentral-01.azurewebsites.net/${
+        params ? "filter-pdfs-azure?" + params : "all-pdfs-azure"
+      }`;
+      const res = await fetch(url);
+      if (
+        !res.ok ||
+        !res.headers.get("content-type")?.includes("application/json")
+      )
+        throw new Error();
+      const data = await res.json();
+      setPdfs(data.pdfs || []);
+    } catch (err) {
+      console.error("Error fetching PDFs:", err);
+      setPdfs([]);
     } finally {
-      setIsLoading(false); // stop loader
+      setIsLoading(false);
     }
   };
 
-  const handleSearch = () => {
-    fetchPdfList({
-      itemNumber: form.itemNumber,
-      status: form.status.join(","),
-      description: form.description,
-      bolt_hole_size: form.bolt_hole_size,
-      bolt_pattern: form.bolt_pattern,
-      bolt_circle_diameter: form.bolt_circle_diameter,
-      bolt_hole_style: form.bolt_hole_style,
+  const resetForm = () => {
+    setForm({
+      itemNumber: "",
+      description: "",
+      pdfFile: null,
+      status: [],
+      bolt_hole_size: "",
+      bolt_pattern: "",
+      bolt_circle_diameter: "",
+      bolt_hole_style: "",
     });
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleUpload = async () => {
     if (!form.pdfFile) {
-      alert("📎 Please select a PDF file before uploading.");
-      return;
+      return alert("📎 Please select a PDF file to upload.");
     }
+
     setIsLoading(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result.split(",")[1];
+    const formData = new FormData();
+    formData.append("email", user?.mail || "");
+    formData.append("description", form.description);
+    formData.append("status", form.status);
+    formData.append("bolt_hole_size", form.bolt_hole_size);
+    formData.append("bolt_pattern", form.bolt_pattern);
+    formData.append("bolt_circle_diameter", form.bolt_circle_diameter);
+    formData.append("bolt_hole_style", form.bolt_hole_style);
+    formData.append("itemNumber", form.itemNumber);
+    formData.append("pdf", form.pdfFile);
 
-      const payload = {
-        user_id: 33,
-        pdf_file_name: form.itemNumber || form.pdfFile.name,
-        pdf_base64: base64String,
-        description: form.description,
-        status: form.status.join(","), // convert array to comma-separated string
-        bolt_hole_size: form.bolt_hole_size,
-        bolt_pattern: form.bolt_pattern,
-        bolt_circle_diameter: form.bolt_circle_diameter,
-        bolt_hole_style: form.bolt_hole_style,
-      };
-
-      try {
-        const res = await fetch("http://192.168.6.18:8000/addpdf", {
+    try {
+      const response = await fetch(
+        `https://remixbackend-badjarfeekbufqb3.canadacentral-01.azurewebsites.net/upload-pdf-azure`,
+        {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-          alert("✅ PDF uploaded successfully.");
-          setForm({
-            itemNumber: "",
-            description: "",
-            pdfFile: null,
-            status: [],
-            bolt_hole_size: "",
-            bolt_pattern: "",
-            bolt_circle_diameter: "",
-            bolt_hole_style: "",
-          });
-          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-          }
-          fetchPdfList();
-        } else {
-          const result = await res.json();
-          alert("❌ Upload failed: " + (result?.message || "Server error."));
+          body: formData,
         }
-      } catch (_) {
-        alert(
-          "❌ Failed to upload. Please check your network or try again later."
-        );
-      } finally {
-        setIsLoading(false); // Stop loader
-      }
-    };
+      );
 
-    reader.readAsDataURL(form.pdfFile);
+      if (response.ok) {
+        alert("✅ Uploaded successfully.");
+        fetchAndShowPdfs();
+      } else {
+        const result = await response.json();
+        alert(`❌ Upload failed: ${result?.message || "Server error."}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ Upload failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getViewData = (item) => {
+    setSelectedItem(item);
+    setForm({
+      itemNumber: item.itemNumber || "",
+      description: item.description || "",
+      pdfFile: null, // Reset file input, kyunki file URL se directly form me nahi set kar sakte
+      status: item.status ? [item.status] : [], // status ko array me daal diya
+      bolt_hole_size: item.bolt_hole_size || "",
+      bolt_pattern: item.bolt_pattern || "",
+      bolt_circle_diameter: item.bolt_circle_diameter || "",
+      bolt_hole_style: item.bolt_hole_style || "",
+      id: item.id,
+      blobUrl: item.pdf, // Assuming item.pdf is the blob URL
+    });
+    setView(true);
+  };
+
+  const getEditData = (item) => {
+    setEdit(true);
+    setSelectedItem(item);
+    setForm({
+      itemNumber: item.itemNumber || "",
+      description: item.description || "",
+      pdfFile: null, // Reset file input, kyunki file URL se directly form me nahi set kar sakte
+      status: item.status ? [item.status] : [], // status ko array me daal diya
+      bolt_hole_size: item.bolt_hole_size || "",
+      bolt_pattern: item.bolt_pattern || "",
+      bolt_circle_diameter: item.bolt_circle_diameter || "",
+      bolt_hole_style: item.bolt_hole_style || "",
+      id: item.id,
+      blobUrl: item.pdf, // Assuming item.pdf is the blob URL
+    });
+  };
+
+  const handleEdit = async () => {
+    setIsLoading(true);
+    const formData = new FormData();
+    formData.append("email", user?.mail || "");
+    formData.append("description", form.description);
+    formData.append("status", form.status);
+    formData.append("bolt_hole_size", form.bolt_hole_size);
+    formData.append("bolt_pattern", form.bolt_pattern);
+    formData.append("bolt_circle_diameter", form.bolt_circle_diameter);
+    formData.append("bolt_hole_style", form.bolt_hole_style);
+    formData.append("itemNumber", form.itemNumber);
+    formData.append("id", form.id);
+
+    if (form.blobUrl) {
+      formData.append("blobUrl", form.blobUrl);
+    }
+    if (form.pdfFile) {
+      formData.append("pdf", form.pdfFile);
+    }
+    try {
+      const response = await fetch(
+        `https://remixbackend-badjarfeekbufqb3.canadacentral-01.azurewebsites.net/edit-pdf-azure`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      if (response.ok) {
+        alert("✅ Updated successfully.");
+
+        fetchAndShowPdfs();
+      } else {
+        const result = await response.json();
+        alert(`❌ Edit failed: ${result?.message || "Server error."}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ Edit failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    const filters = {};
+    Object.entries(form).forEach(([key, value]) => {
+      if (Array.isArray(value) && value.length > 0)
+        filters[key] = value.join(",");
+      else if (typeof value === "string" && value.trim() !== "")
+        filters[key] = value;
+    });
+    fetchAndShowPdfs(filters);
+  };
+
+  const handleInputChange = (e) => {
+    const { className, type, value, checked, files } = e.target;
+
+    // Agar checkbox hai aur status array ka part hai
+    if (type === "checkbox") {
+      if (checked) {
+        setForm({
+          ...form,
+          status: value, // replace existing status with new one
+        });
+      } else {
+        setForm({
+          ...form,
+          status: "", // uncheck means no status selected
+        });
+      }
+    }
+
+    // Agar file hai
+    else if (type === "file") {
+      setForm({
+        ...form,
+        pdfFile: files[0],
+      });
+    }
+    // Normal text input
+    else {
+      setForm({
+        ...form,
+        [className]: value,
+      });
+    }
   };
 
   const handleLogout = () => {
     window.location.href =
-      "https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=http://localhost:3001/login";
+      "https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=https://remixfrontend-brbnd3hvaudwc0dw.canadacentral-01.azurewebsites.net/login";
   };
 
   return (
@@ -189,51 +274,54 @@ export default function Dashboard({ onItemClick }) {
             <p>System Engineer</p>
           </div>
 
-          <div className="sidebar-buttons">
-            <button onClick={handleSearch}>🔍 Search</button>
-            <button>⬆ Upload</button>
-          </div>
-
           <form className="upload-form">
-            <h4>Upload</h4>
+            <h4>{edit ? "Edit" : "Upload"}</h4>
+            <button
+              style={{ display: edit || view ? "none" : "" }}
+              type="button"
+              onClick={handleSearch}
+            >
+              🔍 Search
+            </button>
             <input
               type="text"
+              className="itemNumber"
               placeholder="Item Number"
               value={form.itemNumber}
-              onChange={(e) => setForm({ ...form, itemNumber: e.target.value })}
+              onChange={handleInputChange}
+              readOnly={view}
             />
-
             <input
               type="text"
-              placeholder="Description"
+              placeholder="description"
+              className="description"
               value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
+              onChange={handleInputChange}
+              readOnly={view}
             />
-
             <input
               type="file"
               accept="application/pdf"
+              className="flie"
               ref={fileInputRef}
-              onChange={(e) => setForm({ ...form, pdfFile: e.target.files[0] })}
+              onChange={handleInputChange}
+              disabled={view}
             />
+
             <div className="status-section">
               <p>Status</p>
               <div style={{ display: "flex" }}>
                 {["active", "slow moving", "archive"].map((status) => (
-                  <label key={status} style={{}}>
+                  <label key={status}>
                     <input
                       type="checkbox"
-                      checked={form.status.includes(status)}
-                      onChange={(e) => {
-                        const updated = e.target.checked
-                          ? [...form.status, status]
-                          : form.status.filter((s) => s !== status);
-                        setForm({ ...form, status: updated });
-                      }}
-                    />{" "}
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                      className="status"
+                      checked={form.status == status}
+                      onChange={handleInputChange}
+                      value={status}
+                      disabled={view}
+                    />
+                    {status}
                   </label>
                 ))}
               </div>
@@ -244,49 +332,55 @@ export default function Dashboard({ onItemClick }) {
                 <input
                   type="text"
                   placeholder="Bolt Hole Size"
+                  className="bolt_hole_size"
                   value={form.bolt_hole_size}
-                  onChange={(e) =>
-                    setForm({ ...form, bolt_hole_size: e.target.value })
-                  }
+                  onChange={handleInputChange}
+                  readOnly={view}
                 />
                 <input
                   type="text"
                   placeholder="Bolt Hole Pattern"
+                  className="bolt_pattern"
                   value={form.bolt_pattern}
-                  onChange={(e) =>
-                    setForm({ ...form, bolt_pattern: e.target.value })
-                  }
+                  onChange={handleInputChange}
+                  readOnly={view}
                 />
               </div>
               <div className="bolt-row">
                 <input
                   type="text"
                   placeholder="Bolt Circle Diameter"
+                  className="bolt_circle_diameter"
                   value={form.bolt_circle_diameter}
-                  onChange={(e) =>
-                    setForm({ ...form, bolt_circle_diameter: e.target.value })
-                  }
+                  onChange={handleInputChange}
+                  readOnly={view}
                 />
                 <input
                   type="text"
                   placeholder="Bolt Hole Style"
+                  className="bolt_hole_style"
                   value={form.bolt_hole_style}
-                  onChange={(e) =>
-                    setForm({ ...form, bolt_hole_style: e.target.value })
-                  }
+                  onChange={handleInputChange}
+                  readOnly={view}
                 />
               </div>
             </div>
+            <button
+              style={{ display: !edit ? "none" : "" }}
+              type="button"
+              onClick={handleEdit}
+            >
+              ✏️ EdIt
+            </button>
 
             <button
-              type="submit"
-              onClick={(e) => {
-                e.preventDefault(); // 👈 prevent full page reload
-                handleUpload();
-              }}
+              style={{ display: edit || view ? "none" : "" }}
+              type="button"
+              onClick={handleUpload}
             >
               ⬆ Upload
             </button>
+
             <button type="button" onClick={handleLogout}>
               Log Out
             </button>
@@ -299,7 +393,12 @@ export default function Dashboard({ onItemClick }) {
               <div className="pdf-header">
                 <button
                   className="back-btn"
-                  onClick={() => setSelectedItem(null)}
+                  onClick={() => {
+                    setSelectedItem(null);
+                    resetForm();
+                    setEdit(false);
+                    setView(false);
+                  }}
                 >
                   ← Back
                 </button>
@@ -310,40 +409,51 @@ export default function Dashboard({ onItemClick }) {
           ) : (
             <>
               <div className="content-grid">
-                {currentItems.map((item) => (
+                {currentItems.map((item, index) => (
                   <DrawingCard
-                    key={item.id}
-                    item={item}
-                    onClick={setSelectedItem}
+                    key={item.pdf_record_id || index}
+                    item={{
+                      id: item.pdf_record_id || index,
+                      title: item.pdf_name || `Untitled-${index + 1}`,
+                      pdf:
+                        item.blobUrl ||
+                        `data:application/pdf;base64,${item.pdf_base64}`,
+                      createddate: item.uploadedAt || "N/A",
+                      description: item.description || "",
+                      status: item.status || "",
+                      itemNumber: item.itemNumber || "",
+                      bolt_hole_size: item.bolt_hole_size || "",
+                      bolt_pattern: item.bolt_pattern || "",
+                      bolt_circle_diameter: item.bolt_circle_diameter || "",
+                      bolt_hole_style: item.bolt_hole_style || "",
+                    }}
+                    onEdit={getEditData}
+                    onView={getViewData}
                   />
                 ))}
               </div>
-
               <div className="pagination">
-                {" "}
-                <div className="pagination">
+                <button
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => (
                   <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
+                    key={index + 1}
+                    onClick={() => setCurrentPage(index + 1)}
+                    className={currentPage === index + 1 ? "active" : ""}
                   >
-                    Previous
+                    {index + 1}
                   </button>
-                  {Array.from({ length: totalPages }).map((_, index) => (
-                    <button
-                      key={index + 1}
-                      onClick={() => setCurrentPage(index + 1)}
-                      className={currentPage === index + 1 ? "active" : ""}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
               </div>
             </>
           )}
