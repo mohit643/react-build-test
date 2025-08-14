@@ -3,78 +3,63 @@ import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/build/pdf";
 import downloadIcon from "../assets/dummy-pdfs/download.png";
 import "./DrawingCard.css";
 
-// 👇 PDF.js के worker की path set करें
-GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-export default function DrawingCard({ item, onClick }) {
+export default function DrawingCard({ item, onEdit, onView }) {
   const [thumbnail, setThumbnail] = useState(null);
+
   useEffect(() => {
-    console.log("Rendering PDF thumbnail for:", item);
-    if (!item?.pdf) return;
-
     const renderPDFThumbnail = async () => {
-      console.log("Rendering PDF thumbnail for:", item.pdf);
-
+      if (!item?.pdf) return;
       try {
-        const loadingTask = getDocument(item.pdf);
+        const loadingTask = getDocument({ url: item.pdf });
         const pdf = await loadingTask.promise;
         const page = await pdf.getPage(1);
-
-        // Fixed thumbnail size
-        const FIXED_WIDTH = 200;
-        const FIXED_HEIGHT = 200;
-
-        const viewport = page.getViewport({ scale: 1 });
-        const scale = Math.max(
-          FIXED_WIDTH / viewport.width,
-          FIXED_HEIGHT / viewport.height
-        ); // 👈 zoom in
-        const scaledViewport = page.getViewport({ scale });
 
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
 
-        // Canvas remains fixed size, even if PDF page is bigger
-        canvas.width = FIXED_WIDTH;
-        canvas.height = FIXED_HEIGHT;
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
 
-        // Calculate offset to center the rendered page
-        const offsetX = (FIXED_WIDTH - scaledViewport.width) / 2;
-        const offsetY = (FIXED_HEIGHT - scaledViewport.height) / 2;
+        await page.render({ canvasContext: context, viewport }).promise;
 
-        // Optional: Fill background white
-        context.fillStyle = "#fff";
-        context.fillRect(0, 0, FIXED_WIDTH, FIXED_HEIGHT);
-
-        // Translate and render
-        context.translate(offsetX, offsetY);
-        await page.render({ canvasContext: context, viewport: scaledViewport })
-          .promise;
-
-        const jpgDataUrl = canvas.toDataURL("image/jpeg");
-        setThumbnail(jpgDataUrl);
+        setThumbnail(canvas.toDataURL("image/jpeg"));
       } catch (error) {
-        console.error("Failed to render thumbnail:", error);
+        console.error("PDF render error:", error);
       }
     };
 
     renderPDFThumbnail();
-  }, [item.pdf]);
+  }, [item?.pdf]);
+
+  if (!item) return null;
 
   return (
-    <div className="drawing-card" onClick={() => onClick(item)}>
+    <div
+      className="drawing-card"
+      // onClick={() => onClick?.(item)}
+      style={{ cursor: "pointer", position: "relative" }}
+    >
       {thumbnail ? (
-        <img src={thumbnail} alt="PDF preview" className="drawing-img" />
+        <img
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent card click
+            onView?.(item);
+          }}
+          src={thumbnail}
+          alt="PDF preview"
+          className="drawing-img"
+        />
       ) : (
         <div className="loading-placeholder">Loading preview...</div>
       )}
 
       <div
         className="drawing-info"
-        style={{
-          height: "60px", // 👈 fixed height
-          overflow: "hidden",
-        }}
+        style={{ height: "60px", overflow: "hidden" }}
       >
         <strong
           style={{
@@ -84,7 +69,7 @@ export default function DrawingCard({ item, onClick }) {
             textOverflow: "ellipsis",
           }}
         >
-          {item.title}
+          {item.itemNumber}
         </strong>
 
         <div
@@ -102,39 +87,58 @@ export default function DrawingCard({ item, onClick }) {
               overflow: "hidden",
               textOverflow: "ellipsis",
               display: "-webkit-box",
-              WebkitLineClamp: 2, // 👈 show 2 lines max
+              WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
             }}
           >
-            <strong style={{ display: "block", margin: 0 }}>
-              {item.description}
-            </strong>
-            <strong style={{ display: "block", margin: 0 }}>
-              {item.createddate}
-            </strong>
+            <strong>{item.description}</strong>
+            <br />
+            <small>{item.createddate}</small>
           </div>
 
-          <div className="card-actions">
-            <button className="edit-btn" onClick={(e) => e.stopPropagation()}>
+          <div className="card-actions" style={{ display: "flex", gap: "5px" }}>
+            <button
+              className="edit-btn"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent card click
+                onEdit?.(item);
+              }}
+            >
               Edit
             </button>
-            <a href={item.pdf} download onClick={(e) => e.stopPropagation()}>
-              <button
-                className="download-btn"
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                }}
-              >
-                <img
-                  src={downloadIcon}
-                  alt="Download"
-                  style={{ width: "20px", height: "20px" }}
-                />
-              </button>
-            </a>
+
+            <button
+              className="download-btn"
+              onClick={async (e) => {
+                e.stopPropagation(); // Prevent card click
+                try {
+                  const res = await fetch(item.pdf);
+                  if (!res.ok) throw new Error("Failed to fetch PDF");
+
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `${
+                    item.title?.replace(/\s+/g, "_") || "download"
+                  }.pdf`;
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error("Download failed:", err);
+                  alert("❌ Download failed");
+                }
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
+              <img src={downloadIcon} alt="Download" width={20} height={20} />
+            </button>
           </div>
         </div>
       </div>

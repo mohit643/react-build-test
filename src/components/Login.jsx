@@ -2,7 +2,8 @@ import "./Login.css";
 
 export default function Login({ onLogin }) {
   const handleLoginpage = () => {
-    window.location.href = "http://localhost:3000/login";
+    window.location.href =
+      "https://remixbackend-badjarfeekbufqb3.canadacentral-01.azurewebsites.net/login";
   };
 
   return (

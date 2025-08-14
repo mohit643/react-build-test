@@ -19,35 +19,6 @@ function App() {
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/" element={<Login />} />
-        {/* <Route
-          path="/"
-          element={
-            isLoggedIn ? (
-              <Navigate to="/dashboard" />
-            ) : (
-              // <Login onLogin={() => setIsLoggedIn(true)} />
-              <Navigate to="/dashboard" />
-            )
-          }
-        /> */}
-        <Route
-          path="/dashboard"
-          element={
-            isLoggedIn ? (
-              selectedItem ? (
-                <Viewer
-                  item={selectedItem}
-                  goBack={() => setSelectedItem(null)}
-                />
-              ) : (
-                <Dashboard onItemClick={setSelectedItem} />
-              )
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        {/* Optional: fallback for 404 */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
